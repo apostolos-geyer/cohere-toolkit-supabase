@@ -1,22 +1,7 @@
-services:
-  db:
-    image: postgres:14.11-alpine
-    restart: always
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    environment:
-      - PGUSER=postgres
-      - POSTGRES_PASSWORD=postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - db:/var/lib/postgresql/data
-    networks:
-      - proxynet
+name: cohere-toolkit
 
+
+services:
   test_db:
     image: postgres:14.1-alpine
     restart: unless-stopped
@@ -29,10 +14,10 @@ services:
       - proxynet
 
   redis:
-    image: redis:7.2-alpine
+    image: valkey/valkey:8.0-alpine
     restart: always
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "valkey-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,7 +25,7 @@ services:
       - "6379:6379"
     networks:
       - proxynet
-    command: redis-server --save 60 1 --loglevel warning --requirepass redis
+    command: valkey-server --save 60 1 --loglevel warning --requirepass redis
     volumes:
       - ./data:/data
 
@@ -48,7 +33,7 @@ services:
     build:
       context: .
       args:
-        INSTALL_COMMUNITY_DEPS: false
+        INSTALL_COMMUNITY_DEPS: true
       dockerfile: ./src/backend/Dockerfile
     develop:
       watch:
@@ -71,7 +56,6 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - db
       - redis
     volumes:
       # Mount alembic folder to sync migrations
@@ -79,16 +63,15 @@ services:
       # Mount configurations
       - ./src/backend/config/secrets.yaml:/workspace/src/backend/config/secrets.yaml
       - ./src/backend/config/configuration.yaml:/workspace/src/backend/config/configuration.yaml
-    # network_mode: host
     networks:
       - proxynet
+      - supabase_network
 
   frontend:
     build:
       target: ${BUILD_TARGET:-prod}
-      context: ./src/interfaces/assistants_web
+      context: ./src/interfaces/coral_web
       dockerfile: Dockerfile
-    # Set environment variables directly in the docker-compose file
     environment:
       API_HOSTNAME: http://backend:8000
       NEXT_PUBLIC_API_HOSTNAME: ${NEXT_PUBLIC_API_HOSTNAME}
@@ -103,7 +86,7 @@ services:
     develop:
       watch:
         - action: sync
-          path: ./src/interfaces/assistants_web
+          path: ./src/interfaces/coral_web
           target: /app
           ignore:
             - node_modules/
@@ -125,3 +108,7 @@ volumes:
 networks:
   proxynet:
     name: custom_network
+  supabase_network:
+    external: true
+    name: toolkit_supabase_network
+
